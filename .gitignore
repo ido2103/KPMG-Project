@@ -3,3 +3,4 @@ venv/
 Venv/
 Documentation/
 test.py
+.gradio/
