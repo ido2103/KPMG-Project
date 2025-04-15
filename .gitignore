@@ -1,6 +1,22 @@
+# Environment and credentials
 .env
+.venv
 venv/
+env/
+
+# Temp files
+tmp/
+__pycache__/
+*.py[cod]
+*$py.class
+.gradio/
+
+# OS specific
+.DS_Store
+Thumbs.db
+
 Venv/
 Documentation/
 test.py
 .gradio/
+tmp/

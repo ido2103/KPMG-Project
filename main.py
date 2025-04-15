@@ -7,6 +7,7 @@ from azure.ai.documentintelligence import DocumentIntelligenceClient
 from azure.ai.documentintelligence.models import AnalyzeResult
 from openai import AzureOpenAI
 import gradio as gr
+import re
 
 # Load environment variables from .env file
 load_dotenv()
@@ -201,6 +202,18 @@ The 'idNumber' might be located far from the 'ת.ז.' label, potentially near th
 Look for a 9 or 10-digit number in the personal details section, even if it's spatially distant from the label.
 Look throughout the entire document for a number that appears to be an Israeli ID (usually 9 digits).
 For this form specifically, look around coordinates y=3.3 for ID numbers if they're not directly beside the label.
+If the ID number is 10 digits - simply remove the very last digit.
+
+JOB TYPE (CRITICAL):
+For 'jobType', look for text near the label 'סוג העבודה'
+VERY IMPORTANT: In most forms, the job type appears immediately after 'אני מבקש לקבל עזרה רפואית בגין פגיעה בעבודה שארעה לי'
+Look for workplace names like 'מאפיית האחים' , 'ירקנייה' or other business types that appear in this location. Look for a contexctual fit.
+
+ACCIDENT LOCAITON (CRITICAL):
+The available  options are: במפעל, ת. דרכים בעבודה, ת. דרכים בדרך לעבודה/מהעבודה, תאונה בדרך ללא רכב, אחר _______
+If the option includes אחר only add the text that comes AFTER אחר.
+
+Job Type will inherently be different from Accident Location, and is not limited to the options available for accident location.
 
 SELECTIONS AND CHECKBOXES:
 Pay close attention to 'SELECTED' and 'UNSELECTED' markers in the Selection Marks section
@@ -212,7 +225,9 @@ HEALTH FUND MEMBER:
 For 'medicalInstitutionFields.healthFundMember': Carefully check the 'SELECTION MARKS' section for 'כללית', 'מכבי', 'מאוחדת', or 'לאומית'.
 The OCR data for this specific field might be unreliable or contradictory.
 If exactly one fund is clearly marked 'SELECTED' in the 'SELECTION MARKS' list, use it.
-If multiple are marked selected, or none are, return an empty string for this field.
+If multiple are marked selected, return an empty string for this field.
+If NONE are marked selected, look for a clue from the very beginning of the text. It will mention one of the options near the text 'אל קופ"ח/בי"הח':
+ 'כללית', 'מכבי', 'מאוחדת', or 'לאומית'.
 
 NATURE OF ACCIDENT:
 For 'medicalInstitutionFields.natureOfAccident': Extract the text found directly under the label 'מהות התאונה (אבחנות רפואיות):'.
@@ -450,10 +465,7 @@ def extract_fields_with_gpt(ocr_result):
     print(formatted_text[:1000] + "..." if len(formatted_text) > 1000 else formatted_text)
     print("==== OCR PAYLOAD END ====\n")
     
-    # Save the full payload to a file for detailed inspection
-    with open("ocr_payload.txt", "w", encoding="utf-8") as f:
-        f.write(formatted_text)
-    logger.info("Full OCR payload saved to 'ocr_payload.txt'")
+
 
     # Fill in the prompt template with enhanced OCR information
     logger.info("Filling prompt template...")
@@ -469,7 +481,7 @@ def extract_fields_with_gpt(ocr_result):
                 {"role": "user", "content": filled_prompt}
             ],
             response_format={"type": "json_object"},
-            temperature=0.01
+            temperature=0.0
         )
         
         # Parse the response
@@ -573,6 +585,17 @@ def validate_extracted_data(data):
     logger.info("Validating extracted data...")
     # Initialize a list to track validation issues
     validation_issues = []
+
+    # 0. Clean up ID number if too long
+    if "idNumber" in data and data["idNumber"]:
+        id_number = data["idNumber"]
+        # If ID is over 10 characters, remove the last digit
+        if len(id_number) > 10:
+            original_id = id_number
+            id_number = id_number[:-1]
+            data["idNumber"] = id_number
+            logger.info(f"ID number too long, truncating: {original_id} -> {id_number}")
+            validation_issues.append(f"Truncated ID number: {original_id} -> {id_number}")
 
     # 1. Fix JSON structure issues - ensure medicalInstitutionFields is nested correctly
     if "healthFundMember" in data:
@@ -721,13 +744,6 @@ def validate_extracted_data(data):
                     data["address"][part] = ""
                     validation_issues.append(f"Added missing '{part}' in 'address'")
 
-    # 5. Validate health fund member (must be one of the known options)
-    if "medicalInstitutionFields" in data and "healthFundMember" in data["medicalInstitutionFields"]:
-        valid_funds = ["כללית", "מכבי", "מאוחדת", "לאומית"]
-        hfm = data["medicalInstitutionFields"]["healthFundMember"]
-        if hfm and hfm not in valid_funds:
-            validation_issues.append(f"Invalid health fund: '{hfm}'")
-
     # 6. Validate gender (should be זכר or נקבה)
     if "gender" in data and data["gender"]:
         valid_genders = ["זכר", "נקבה", "male", "female"]
@@ -764,6 +780,10 @@ def process_document(file_path):
         # Debug - Check if direct extraction touched landlinePhone
         if "landlinePhone" in direct_extractions:
             print(f"[DEBUG] landlinePhone from direct extraction: '{direct_extractions['landlinePhone']}'")
+        
+        # Debug - Check if direct extraction found jobType
+        if "jobType" in direct_extractions:
+            print(f"[DEBUG] jobType from direct extraction: '{direct_extractions['jobType']}'")
             
         # Override specific fields where direct extraction is more reliable
         if direct_extractions.get("accidentLocation"):
@@ -783,6 +803,12 @@ def process_document(file_path):
             if extracted_data.get("landlinePhone") != direct_extractions["landlinePhone"]:
                 logger.info(f"Overriding 'landlinePhone' from '{extracted_data.get('landlinePhone')}' to '{direct_extractions['landlinePhone']}'")
                 extracted_data["landlinePhone"] = direct_extractions["landlinePhone"]
+        
+        # Override jobType from direct extraction if available
+        if direct_extractions.get("jobType"):
+            if extracted_data.get("jobType") != direct_extractions["jobType"]:
+                logger.info(f"Overriding 'jobType' from '{extracted_data.get('jobType')}' to '{direct_extractions['jobType']}'")
+                extracted_data["jobType"] = direct_extractions["jobType"]
         
         # Debug - Check landlinePhone before validation
         if "landlinePhone" in extracted_data:
@@ -834,6 +860,12 @@ def extract_fields_directly(ocr_result):
     landline_phone = extract_landline_phone(ocr_result)
     if landline_phone:
         extracted_fields["landlinePhone"] = landline_phone
+    
+    # Extract job type directly from OCR results
+    job_type = extract_job_type(ocr_result)
+    if job_type:
+        extracted_fields["jobType"] = job_type
+        extraction_reasoning["jobType"] = ["Extracted job type directly from OCR results", f"Found: '{job_type}'"]
     
     # Get all selection marks across all pages
     all_marks = []
@@ -1052,27 +1084,181 @@ def get_health_fund_member(marks, ocr_result):
     
     reasoning.append(f"Found {len(selected_marks)} selected marks in the health fund area")
     
-    # For each selected mark, check if its nearby text contains any known fund
-    for mark in selected_marks:
+    # Try the improved RTL-aware fund detection method first
+    return get_health_fund_member_improved(selected_marks, ocr_result)
+
+def get_health_fund_member_improved(marks, ocr_result):
+    """Improved health fund member extraction that properly handles RTL layout"""
+    # Known health fund options
+    fund_options = ["כללית", "מכבי", "מאוחדת", "לאומית"]
+    
+    # List to store reasoning steps
+    reasoning = []
+    
+    # For each selected mark, check the nearby text
+    for mark in marks:
         nearby_text = mark["nearby_text"]
+        reasoning.append(f"Analyzing mark at {mark['coords']} with nearby text: '{nearby_text}'")
         
-        # Check each fund against the nearby text
+        # Check if multiple fund options appear in the nearby text
+        found_funds = []
         for fund in fund_options:
             if fund in nearby_text:
-                reasoning.append(f"Found fund '{fund}' in nearby text: '{nearby_text}'")
-                return fund, reasoning
-    
-    # If we couldn't match a specific fund but found a mark in the right area
-    if selected_marks:
-        reasoning.append("Could not match a specific fund from nearby text")
+                found_funds.append(fund)
         
-        # If we found a fund in the header, use that as fallback
-        if form_header_fund:
-            reasoning.append(f"Using fund from form header as fallback: '{form_header_fund}'")
-            return form_header_fund, reasoning
+        if len(found_funds) > 0:
+            reasoning.append(f"Found {len(found_funds)} funds in nearby text: {found_funds}")
+            
+            # In RTL (Hebrew) layout, the checkmark is to the RIGHT of the selected option
+            # Therefore, we need to find the LAST (rightmost) fund in the text
+            
+            # Split the text by pipe or common separators
+            parts = nearby_text.replace(" | ", "|").split("|")
+            reasoning.append(f"Text parts: {parts}")
+            
+            # If we have multiple separated parts, look at the rightmost part (last in list)
+            if len(parts) > 1:
+                rightmost_part = parts[-1].strip()
+                reasoning.append(f"Rightmost part: '{rightmost_part}'")
+                
+                # Check if this part contains a fund name
+                for fund in fund_options:
+                    if fund in rightmost_part:
+                        reasoning.append(f"Found fund '{fund}' in rightmost part of nearby text")
+                        return fund, reasoning
+            
+            # If the above method didn't work, try a different approach
+            # Find the last (rightmost) fund mentioned in the text
+            last_found_fund = None
+            last_position = -1
+            
+            for fund in fund_options:
+                pos = nearby_text.rfind(fund)  # Use rfind to get the last occurrence
+                if pos > last_position:
+                    last_position = pos
+                    last_found_fund = fund
+            
+            if last_found_fund:
+                reasoning.append(f"Using last (rightmost) fund mentioned: '{last_found_fund}'")
+                return last_found_fund, reasoning
+            
+            # If all else fails, use the first fund found as fallback
+            reasoning.append(f"Using first fund found as fallback: '{found_funds[0]}'")
+            return found_funds[0], reasoning
     
-    reasoning.append("Could not determine health fund member")
+    reasoning.append("Could not determine health fund member using improved RTL-aware method")
     return None, reasoning
+
+def extract_job_type(ocr_result):
+    """Extract job type directly from OCR text using specific patterns"""
+    print("\n[JOB TYPE EXTRACT] Looking for job type in OCR results")
+    
+    # The job type might be between specific phrases
+    job_type = None
+    
+    # Method 1: Look for text between request for medical help and when they worked
+    found_request = False
+    for page in ocr_result.pages:
+        if hasattr(page, 'lines'):
+            for i, line in enumerate(page.lines):
+                if hasattr(line, 'content'):
+                    content = line.content.strip()
+                    
+                    # Check if this is the request for medical help line
+                    if "אני מבקש לקבל עזרה רפואית בגין פגיעה בעבודה שארעה לי" in content:
+                        found_request = True
+                        print(f"[JOB TYPE EXTRACT] Found request line: '{content}'")
+                        
+                        # Check if there are more lines available
+                        if i + 1 < len(page.lines):
+                            next_line = page.lines[i + 1].content.strip()
+                            print(f"[JOB TYPE EXTRACT] Next line: '{next_line}'")
+                            
+                            # Method 1A: Extract job type from the same line as "כאשר עבדתי ב"
+                            if "כאשר עבדתי ב" in next_line:
+                                # Try to extract what comes after "כאשר עבדתי ב"
+                                parts = next_line.split("כאשר עבדתי ב")
+                                if len(parts) > 1:
+                                    # Extract potential job type after "כאשר עבדתי ב"
+                                    potential_job = parts[1].strip()
+                                    
+                                    # Clean up time pattern if present (e.g., "12:00 ירקנייה" -> "ירקנייה")
+                                    potential_job = re.sub(r'^\d+:\d+\s+', '', potential_job)
+                                    
+                                    print(f"[JOB TYPE EXTRACT] Extracted potential job type from work line: '{potential_job}'")
+                                    
+                                    # Check if it's not a date or another field
+                                    if (potential_job and 
+                                        not re.match(r'^\d+[./]\d+[./]\d+', potential_job) and
+                                        "בתאריך" not in potential_job and
+                                        not potential_job.isdigit()):
+                                        job_type = potential_job
+                                        print(f"[JOB TYPE EXTRACT] Identified job type from work line: '{job_type}'")
+                                        break
+                            
+                            # Method 1B: Check if there's a separate line for job type between these two markers
+                            if not job_type and "כאשר עבדתי ב" not in next_line:
+                                # Check if two lines ahead has the "when I worked" phrase
+                                if i + 2 < len(page.lines):
+                                    next_next_line = page.lines[i + 2].content.strip()
+                                    if "כאשר עבדתי ב" in next_next_line:
+                                        # The line between these is likely the job type
+                                        print(f"[JOB TYPE EXTRACT] Identified potential job type: '{next_line}'")
+                                        job_type = next_line
+                                        break
+                    
+                    # Method 2: Check if the line directly references job type
+                    elif ("סוג העבודה" in content) and ":" in content:
+                        # Extract text after the colon
+                        value = content.split(":", 1)[1].strip()
+                        if value and not value.isdigit():
+                            print(f"[JOB TYPE EXTRACT] Found job type by label: '{value}'")
+                            job_type = value
+                            break
+            
+            # If we found a job type, break the outer loop as well
+            if job_type:
+                break
+    
+    # Method 3: Look for standalone "סוג העבודה" followed by another line
+    # NOTE: We'll skip this method if we already found a job type using the more reliable methods above
+    if not job_type:
+        for page in ocr_result.pages:
+            if hasattr(page, 'lines'):
+                for i, line in enumerate(page.lines):
+                    if hasattr(line, 'content'):
+                        content = line.content.strip()
+                        
+                        # Check if this is exactly the job type label
+                        if content == "סוג העבודה":
+                            print(f"[JOB TYPE EXTRACT] Found standalone job type label")
+                            
+                            # Check if there is a next line that could be the value
+                            if i + 1 < len(page.lines):
+                                next_line = page.lines[i + 1].content.strip()
+                                
+                                # Be more cautious with this method by excluding common accident location options
+                                accident_locations = ["במפעל", "ת. דרכים בעבודה", "תאונה בדרך ללא רכב", "אחר"]
+                                if (next_line and 
+                                    not next_line.startswith("בתאריך") and 
+                                    not next_line == "שעת הפגיעה" and
+                                    next_line not in accident_locations):
+                                    print(f"[JOB TYPE EXTRACT] Found potential job type value: '{next_line}'")
+                                    job_type = next_line
+                                    break
+                                else:
+                                    print(f"[JOB TYPE EXTRACT] Skipping potential false positive: '{next_line}'")
+                
+                # If we found a job type, break the outer loop as well
+                if job_type:
+                    break
+    
+    if job_type:
+        print(f"[JOB TYPE EXTRACT] Successfully extracted job type: '{job_type}'")
+    else:
+        print("[JOB TYPE EXTRACT] No job type found in OCR results")
+    
+    return job_type
 
 # Gradio UI
 def gradio_interface(file):
