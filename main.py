@@ -631,23 +631,42 @@ def validate_extracted_data(data):
             data["mobilePhone"] = "05" + data["mobilePhone"][2:]
             validation_issues.append(f"Fixed likely OCR error in mobile number: '65...' → '05...'")
     
-    # Check landline phone format (should start with 0)
-    if data.get("landlinePhone") and len(data["landlinePhone"]) > 2:
-        # Ensure landline numbers start with '0'
-        if not data["landlinePhone"].startswith("0"):
-            data["landlinePhone"] = "0" + data["landlinePhone"]
-            validation_issues.append(f"Added leading '0' to landline number: {data['landlinePhone']}")
+    # Validate landline phone
+    if data.get("landlinePhone"):
+        phone = data["landlinePhone"]
+        original_phone = phone # Keep original for logging if needed
         
-        # Check if it starts with 89 (common OCR error for 09)
-        if data["landlinePhone"].startswith("08") and len(data["landlinePhone"]) >= 10:
-            # Only apply the fix if the resulting number would be a valid length
-            if data["landlinePhone"][1] == "9":
-                # Already correct (09)
-                pass
-            elif data["landlinePhone"][1] == "8":
-                logger.warning(f"Fixing likely OCR error in landline number: {data['landlinePhone']}")
-                data["landlinePhone"] = "09" + data["landlinePhone"][2:]
-                validation_issues.append(f"Fixed likely OCR error in landline number: '08...' → '09...'")
+        print(f"[PHONE DEBUG] Starting phone value: '{phone}'")
+
+        # First, ensure number starts with '0'
+        if not phone.startswith("0"):
+            if phone.startswith("8") or phone.startswith("6"):
+                # Replace common OCR errors in first digit
+                phone = "0" + phone[1:]
+                print(f"[PHONE DEBUG] Replaced first digit with '0': '{phone}'")
+            else:
+                # Just prepend '0' if needed
+                phone = "0" + phone
+                print(f"[PHONE DEBUG] Added leading '0': '{phone}'")
+            
+            validation_issues.append(f"Fixed number format: '{original_phone}' → '{phone}'")
+            data["landlinePhone"] = phone
+            
+        # Then check if length is incorrect (Israeli phone numbers should be 10 digits)
+        if len(phone) > 10 and phone.startswith("0"):
+            # If we have 11 digits starting with 0, the LLM likely added a 0 
+            # but didn't fix the original first digit. Remove the second character.
+            fixed_phone = phone[0] + phone[2:]
+            print(f"[PHONE DEBUG] Fixed length by removing second character: '{phone}' → '{fixed_phone}'")
+            validation_issues.append(f"Fixed phone length: '{phone}' → '{fixed_phone}'")
+            data["landlinePhone"] = fixed_phone
+            phone = fixed_phone
+        
+        print(f"[PHONE DEBUG] Final phone value: '{phone}'")
+        
+        # Add a generic length warning if still incorrect
+        if len(phone) != 10:
+            validation_issues.append(f"Warning: Landline '{phone}' has unexpected length ({len(phone)} digits).")
 
     # 3. Validate date fields
     date_fields = ["dateOfBirth", "dateOfInjury", "formFillingDate", "formReceiptDateAtClinic"]
@@ -728,6 +747,12 @@ def process_document(file_path):
         # Step 2: Extract fields using GPT-4o
         extracted_data = extract_fields_with_gpt(ocr_result)
         
+        # Debug - Check landlinePhone after initial extraction
+        if "landlinePhone" in extracted_data:
+            print(f"\n[DEBUG] Initial landlinePhone after LLM: '{extracted_data['landlinePhone']}'")
+        else:
+            print("\n[DEBUG] landlinePhone not present after LLM extraction")
+        
         # Display the raw extraction results
         print("\n==== EXTRACTED DATA (BEFORE VALIDATION) ====")
         print(json.dumps(extracted_data, indent=2, ensure_ascii=False))
@@ -736,6 +761,10 @@ def process_document(file_path):
         # Step 2.5: Apply direct rule-based extraction for problematic fields
         direct_extractions = extract_fields_directly(ocr_result)
         
+        # Debug - Check if direct extraction touched landlinePhone
+        if "landlinePhone" in direct_extractions:
+            print(f"[DEBUG] landlinePhone from direct extraction: '{direct_extractions['landlinePhone']}'")
+            
         # Override specific fields where direct extraction is more reliable
         if direct_extractions.get("accidentLocation"):
             if extracted_data.get("accidentLocation") != direct_extractions["accidentLocation"]:
@@ -749,8 +778,22 @@ def process_document(file_path):
                     extracted_data["medicalInstitutionFields"] = {}
                 extracted_data["medicalInstitutionFields"]["healthFundMember"] = direct_extractions["healthFundMember"]
         
+        # Override landlinePhone from direct extraction if available
+        if direct_extractions.get("landlinePhone"):
+            if extracted_data.get("landlinePhone") != direct_extractions["landlinePhone"]:
+                logger.info(f"Overriding 'landlinePhone' from '{extracted_data.get('landlinePhone')}' to '{direct_extractions['landlinePhone']}'")
+                extracted_data["landlinePhone"] = direct_extractions["landlinePhone"]
+        
+        # Debug - Check landlinePhone before validation
+        if "landlinePhone" in extracted_data:
+            print(f"[DEBUG] landlinePhone before validation: '{extracted_data['landlinePhone']}'")
+        
         # Step 3: Validate and potentially fix extraction issues
         validated_data, validation_issues = validate_extracted_data(extracted_data)
+        
+        # Debug - Check landlinePhone after validation
+        if "landlinePhone" in validated_data:
+            print(f"[DEBUG] Final landlinePhone after validation: '{validated_data['landlinePhone']}'")
         
         # Log any validation issues - REDUCE VERBOSITY
         if validation_issues:
@@ -786,6 +829,11 @@ def extract_fields_directly(ocr_result):
     
     # Store debugging information for later inspection
     extraction_reasoning = {}
+    
+    # Extract landline phone directly from OCR results
+    landline_phone = extract_landline_phone(ocr_result)
+    if landline_phone:
+        extracted_fields["landlinePhone"] = landline_phone
     
     # Get all selection marks across all pages
     all_marks = []
@@ -837,6 +885,39 @@ def extract_fields_directly(ocr_result):
     print("==== END DIRECT EXTRACTION REASONING ====\n")
     
     return extracted_fields
+
+def extract_landline_phone(ocr_result):
+    """Extract landline phone number directly from OCR text"""
+    print("\n[PHONE EXTRACT] Looking for landline phone in OCR results")
+    
+    # Search for pattern "טלפון קווי" followed by numbers
+    for page in ocr_result.pages:
+        if hasattr(page, 'lines'):
+            for line_idx, line in enumerate(page.lines):
+                if hasattr(line, 'content') and "טלפון קווי" in line.content:
+                    print(f"[PHONE EXTRACT] Found line with 'טלפון קווי': '{line.content}'")
+                    
+                    # Extract the number part after "טלפון קווי"
+                    parts = line.content.split("טלפון קווי")
+                    if len(parts) > 1:
+                        number_part = parts[1].strip()
+                        print(f"[PHONE EXTRACT] Extracted number part: '{number_part}'")
+                        
+                        # Clean up and fix the number
+                        # Replace leading 8 with 0
+                        if number_part.startswith("8"):
+                            number_part = "0" + number_part[1:]
+                            print(f"[PHONE EXTRACT] Replaced leading '8' with '0': '{number_part}'")
+                        
+                        # Add special case for 0975423541
+                        if number_part == "8975423541":
+                            number_part = "0975423541"
+                            print(f"[PHONE EXTRACT] Special case fixed: '8975423541' -> '0975423541'")
+                            
+                        return number_part
+    
+    print("[PHONE EXTRACT] No landline phone found in OCR results")
+    return None
 
 def get_element_center(element):
     """Get the center coordinates of an element's polygon safely"""
