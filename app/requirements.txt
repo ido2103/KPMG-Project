@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+openai
+faiss-cpu # Or faiss-gpu if GPU is available and configured
+numpy
+beautifulsoup4
+pydantic
+langdetect # For language detection 
