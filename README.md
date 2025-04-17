@@ -87,6 +87,8 @@ This method orchestrates the three microservices (Phase 1 UI, Phase 2 Backend AP
         # Phase 2 - Data Ingestion Configuration (Used during rag_api image build)
         CHUNK_SIZE=1000
         CHUNK_STRIDE=200
+        INDEX_PATH=./vector_store.faiss
+        METADATA_PATH=./vector_store_metadata.json
         ```
     *   **Note on Quoting:** While some tools might parse `.env` files with quotes around values, the standard convention is to omit quotes unless the value contains spaces or special characters. For simplicity and compatibility, it's recommended to enter values directly (e.g., `AZURE_OPENAI_KEY=YOUR_KEY_HERE`).
     *   **Importance:** This file provides credentials needed during the build of the `rag_api` image (for data ingestion) and at runtime for both the `extractor` and `rag_api` services to connect to Azure.
