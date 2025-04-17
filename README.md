@@ -190,6 +190,29 @@ This method runs the components directly on your machine using Python. It requir
     *   Press `Ctrl+C` in each of the three terminals.
     *   To deactivate the virtual environment: `deactivate`
 
+## Usage Guide
+
+Once the application services are running (using either Docker Compose or the local Python method), you can interact with the different components:
+
+### Phase 1: Document Field Extraction
+
+1.  **Access the UI:** Open your web browser and navigate to [`http://localhost:7860`](http://localhost:7860).
+2.  **Upload Document:** Use the file upload interface to select a National Insurance form (PDF or image format). Sample documents are available in the `assignment/phase1_data/` directory for testing.
+3.  **View Results:** After processing (which involves OCR and LLM extraction), the extracted fields will be displayed in JSON format in the output text box.
+
+### Phase 2: HMO RAG Chatbot
+
+1.  **Access the UI:** Open your web browser and navigate to [`http://localhost:7861`](http://localhost:7861).
+2.  **Interact with the Chatbot:**
+    *   The chatbot will initially guide you through an "intake" phase to collect necessary user profile information (e.g., name, HMO details). Respond to the prompts in the chat interface.
+    *   Once the required information is gathered, the chatbot transitions to the RAG (Retrieval-Augmented Generation) phase.
+    *   You can then ask questions related to HMO services (based on the knowledge base built from `assignment/phase2_data/`). The chatbot will use the provided profile information and the retrieved context from the knowledge base to answer your queries.
+
+### Phase 2: Backend API Health Check (Optional)
+
+*   To verify that the backend API service (`rag_api`) for Phase 2 is running and has successfully loaded its knowledge base (RAG components), you can access its health check endpoint: [`http://localhost:8000/health`](http://localhost:8000/health).
+*   A successful response indicates the service is operational and ready: `{"status":"ok","rag_loaded":true}`.
+
 ## Notes
 
 *   **Credentials:** Never commit your `.env` file to Git. Ensure it's listed in `.gitignore`.
