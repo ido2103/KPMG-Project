@@ -181,18 +181,14 @@ This method runs the components directly on your machine using Python. It requir
         # (venv) ... > 
         python frontend/ui.py
         ```
+7.  **Access Services:**
+    *   Phase 1 UI (Extractor): [`http://localhost:7860`](http://localhost:7860)
+    *   Phase 2 UI (RAG Chatbot): [`http://localhost:7861`](http://localhost:7861)
+    *   Phase 2 Backend Health Check: [`http://localhost:8000/health`](http://localhost:8000/health)
 
-7.  **Stopping Services:**
+8.  **Stopping Services:**
     *   Press `Ctrl+C` in each of the three terminals.
     *   To deactivate the virtual environment: `deactivate`
-
-## Accessing the Services
-
-Once the services are running (either via Docker Compose or locally), you can access them at:
-
-*   Phase 1 UI (Extractor): [`http://localhost:7860`](http://localhost:7860)
-*   Phase 2 UI (RAG Chatbot): [`http://localhost:7861`](http://localhost:7861)
-*   Phase 2 Backend Health Check: [`http://localhost:8000/health`](http://localhost:8000/health)
 
 ## Notes
 
