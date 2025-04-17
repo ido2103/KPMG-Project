@@ -104,9 +104,9 @@ This method orchestrates the three microservices (Phase 1 UI, Phase 2 Backend AP
         *   The services will start concurrently. The `rag_ui` might become accessible slightly before the `rag_api` is fully initialized.
 
 4.  **Access Services:**
-    *   Phase 1 UI (Extractor): [`http://localhost:7860`](http://localhost:7860)
-    *   Phase 2 UI (RAG Chatbot): [`http://localhost:7861`](http://localhost:7861)
-    *   Phase 2 Backend Health Check: [`http://localhost:8000/health`](http://localhost:8000/health)
+*   Phase 1 UI (Extractor): [`http://localhost:7860`](http://localhost:7860)
+*   Phase 2 UI (RAG Chatbot): [`http://localhost:7861`](http://localhost:7861)
+*   Phase 2 Backend Health Check: [`http://localhost:8000/health`](http://localhost:8000/health)
 
 5.  **Stopping Services:**
     *   Press `Ctrl+C` in the terminal running `docker compose up`.
@@ -180,51 +180,22 @@ This method runs the components directly on your machine using Python. It requir
         python frontend/ui.py
         ```
 
-7.  **Access Services:**
-    *   Phase 1 UI (Extractor): [`http://localhost:7860`](http://localhost:7860)
-    *   Phase 2 UI (RAG Chatbot): [`http://localhost:7861`](http://localhost:7861)
-    *   Phase 2 Backend Health Check: [`http://localhost:8000/health`](http://localhost:8000/health)
-
-8.  **Stopping Services:**
+7.  **Stopping Services:**
     *   Press `Ctrl+C` in each of the three terminals.
     *   To deactivate the virtual environment: `deactivate`
+
+## Accessing the Services
+
+Once the services are running (either via Docker Compose or locally), you can access them at:
+
+*   Phase 1 UI (Extractor): [`http://localhost:7860`](http://localhost:7860)
+*   Phase 2 UI (RAG Chatbot): [`http://localhost:7861`](http://localhost:7861)
+*   Phase 2 Backend Health Check: [`http://localhost:8000/health`](http://localhost:8000/health)
 
 ## Notes
 
 *   **Credentials:** Never commit your `.env` file to Git. Ensure it's listed in `.gitignore`.
-*   **Vector Store:** When running locally, ensure you run the `data_ingest/build_vector_store.py` script after installing dependencies and before starting the backend service.
-
-## Project Overview
-
-This project extracts structured data from National Insurance forms (in both Hebrew and English) and outputs the information in a standardized JSON format. It uses:
-
-- Azure Document Intelligence for Optical Character Recognition (OCR)
-- Azure OpenAI (GPT-4o) for field extraction and data processing
-- Gradio for the user interface
-
-## Setup Instructions
-
-1. **Clone the repository**
-
-2. **Install dependencies**
-   ```
-   pip install -r requirements.txt
-   ```
-
-3. **Configure environment variables**
-   - Copy the `.env.example` file to a new file named `.env`
-   - Fill in your Azure credentials:
-     - `AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT`
-     - `AZURE_DOCUMENT_INTELLIGENCE_KEY`
-     - `AZURE_OPENAI_ENDPOINT`
-     - `AZURE_OPENAI_KEY`
-     - `AZURE_OPENAI_DEPLOYMENT` (default: "gpt-4o")
-     - `AZURE_OPENAI_API_VERSION` (default: "2024-02-15-preview")
-
-4. **Run the application**
-   ```
-   python main.py
-   ```
+*   **Vector Store:** When running with Docker Compose, the vector store is built automatically inside the `rag_api` image. When running locally, ensure you run the `data_ingest/build_vector_store.py` script after installing dependencies and before starting the backend service.
 
 ## Features
 
