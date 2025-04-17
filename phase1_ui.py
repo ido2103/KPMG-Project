@@ -31,9 +31,8 @@ interface = gr.Interface(
     outputs=gr.Textbox(label="Extracted Information (JSON)", lines=20),
     title="National Insurance Form Field Extractor (Phase 1)",
     description="Upload a ביטוח לאומי form (PDF or image) to extract information.",
-    examples=[["./assignment/phase1_data/283_ex3.pdf"]] # Adjust example path if necessary
 )
 
 if __name__ == "__main__":
     logger.info("Starting the Gradio UI...")
-    interface.launch(share=False) 
+    interface.launch(server_name="0.0.0.0", share=False) 

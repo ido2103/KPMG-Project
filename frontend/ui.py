@@ -16,36 +16,31 @@ dotenv_path = os.path.join(project_root, '.env')
 load_dotenv(dotenv_path=dotenv_path)
 
 # --- Configuration ---
-BACKEND_URL = os.getenv("BACKEND_API_URL", "http://127.0.0.1:8000") # Default if not set
+# Get backend URL from environment variable, default for local run if not set
+BACKEND_URL = os.getenv("BACKEND_API_URL", "http://127.0.0.1:8000")
 CHAT_ENDPOINT = f"{BACKEND_URL}/chat"
 
 logger.info(f"Connecting to backend at: {BACKEND_URL}")
 
 # --- Helper Functions ---
-def format_gradio_history(chat_history_state: list):
-    """Converts Gradio's state format to the list[ChatMessage] format for the backend."""
-    formatted = []
-    for turn in chat_history_state:
-        user_msg, assistant_msg = turn
-        if user_msg:
-            formatted.append({"role": "user", "content": user_msg})
-        if assistant_msg:
-            formatted.append({"role": "assistant", "content": assistant_msg})
-    return formatted
+# Remove the old format_gradio_history function as it's no longer needed
+# def format_gradio_history(chat_history_state: list):
+#     ...
 
 # --- Gradio Interface Logic ---
 def handle_submit(user_message: str, history_state: list, user_info_state: dict, phase_state: str):
-    """Handles message submission: sends to backend, updates state."""
+    """Handles message submission: sends to backend, updates state using list-of-dicts format."""
     logger.info(f"Submit | Phase: {phase_state}, User Message: {user_message[:50]}...")
     
-    # Append user message to chatbot display immediately
-    history_state.append([user_message, None])
+    # Append user message to history in the new format
+    history_state.append({"role": "user", "content": user_message})
     
     # Prepare payload for backend
+    # Assuming backend expects standard list-of-dicts format now
     payload = {
         "user_info": user_info_state,
         "phase": phase_state,
-        "chat_history": format_gradio_history(history_state[:-1]), # Send history *before* current turn
+        "chat_history": history_state[:-1], # Send history *before* current user message
         "message": user_message
     }
     
@@ -101,16 +96,11 @@ def handle_submit(user_message: str, history_state: list, user_info_state: dict,
         logger.error(f"An unexpected error occurred: {e}", exc_info=True)
         assistant_response_text = "An unexpected error occurred in the frontend." 
 
-    # Update the latest turn in history with the assistant's response
-    # Ensure history_state is not empty before accessing [-1]
-    if history_state:
-        history_state[-1][1] = assistant_response_text
-    else:
-        # This case should ideally not happen if we always append user message first
-        logger.error("History state was empty when trying to update assistant response.")
-        history_state.append([None, assistant_response_text]) # Add a turn with assistant only
+    # Append assistant's response to history in the new format
+    history_state.append({"role": "assistant", "content": assistant_response_text})
     
     # Return updated values for chatbot, history state, user_info state, phase state
+    # history_state is now correctly formatted for the chatbot component
     return history_state, history_state, new_user_info, new_phase
 
 # --- Gradio UI Definition ---
@@ -126,7 +116,7 @@ with gr.Blocks(theme=gr.themes.Soft(), css="footer {display: none !important}") 
     
     chatbot = gr.Chatbot(
             label="HMO Assistant",
-            bubble_full_width=False,
+            type='messages',
             height=600
         )
     
@@ -146,4 +136,4 @@ with gr.Blocks(theme=gr.themes.Soft(), css="footer {display: none !important}") 
 if __name__ == "__main__":
     logger.info("Launching Gradio UI on port 7861...")
     # Set the server port here
-    demo.launch(share=False, server_port=7861) 
+    demo.launch(server_name="0.0.0.0", share=False, server_port=7861) 

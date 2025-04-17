@@ -12,6 +12,6 @@ langchain-community==0.3.21 # LangChain community integrations (might be needed)
 beautifulsoup4==4.13.3        # For parsing HTML from phase2_data
 faiss-cpu==1.10.0           # For efficient vector similarity search (CPU version)
 tiktoken==0.9.0            # For token counting with OpenAI models
-numpy
+numpy==1.26.4
 pydantic
 langdetect

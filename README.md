@@ -1,50 +1,63 @@
 # KPMG GenAI Developer Assessment Assignment
 
-This repository contains the solutions for the GenAI Developer Assessment Assignment, encompassing two phases: Field Extraction from documents and a RAG Chatbot microservice.
+This repository contains the solutions for the GenAI Developer Assessment Assignment, encompassing two phases: Field Extraction from documents and a RAG Chatbot microservice, deployed as containerized microservices.
 
 ## Project Structure
 
 ```
 KPMG Project/
-├── phase1/               # Phase 1: Field Extraction code
-│   ├── azure_clients.py
-│   ├── gpt_extractor.py
-│   └── ... (other helper modules if any)
-├── phase1_ui.py          # Phase 1: Gradio UI
-├── app/                  # Phase 2: Backend FastAPI microservice
+├── phase1/               # Phase 1: Field Extraction Service
+│   ├── Dockerfile          # Dockerfile for extractor service
+│   ├── azure_clients.py  # Azure client initializations
+│   ├── config.py         # Configuration, prompts, schemas
+│   ├── gpt_extractor.py  # Logic for GPT-based extraction
+│   └── processor.py      # Main document processing logic
+├── phase1_ui.py          # Phase 1: Gradio UI entrypoint
+├── app/                  # Phase 2: Backend RAG API Service
+│   ├── Dockerfile          # Dockerfile for RAG API service (includes ingestion)
 │   ├── main.py           # FastAPI app entry point
-│   ├── models.py         # Pydantic models for API requests/responses
+│   ├── models.py         # Pydantic models
 │   ├── rag.py            # RAG logic (vector store interaction)
-│   ├── prompts.py        # Prompt templates for the LLM
-│   ├── chatbot_logic.py  # Core chatbot orchestration logic
-│   ├── config.py         # Configuration loading (from .env)
-│   ├── log_config.py     # Logging setup
-│   └── requirements.txt  # Backend dependencies
-├── frontend/             # Phase 2: Frontend Gradio UI
-│   └── ui.py             # Gradio UI code
+│   ├── prompts.py        # Prompt templates
+│   ├── chatbot_logic.py  # Core chatbot orchestration
+│   ├── config.py         # Configuration loading (runtime)
+│   └── log_config.py     # Logging setup
+├── frontend/             # Phase 2: Frontend Gradio UI Service
+│   ├── Dockerfile          # Dockerfile for RAG UI service
+│   └── ui.py             # Gradio UI code and logic
 ├── data_ingest/          # Phase 2: Script to build vector store
-│   └── build_vector_store.py # HTML parsing and vector store creation
-├── assignment/           # Contains original assignment spec and data
+│   └── build_vector_store.py # Executed during `rag_api` Docker build / local setup
+├── assignment/           # Contains original assignment spec and data (excluded via .dockerignore)
 │   ├── phase1_data/      # Sample PDFs/images for Phase 1
 │   └── phase2_data/      # HTML files for Phase 2 knowledge base
-├── vector_store.faiss      # Generated vector store (gitignored)
-├── vector_store_metadata.json # Generated metadata (gitignored)
 ├── .env                  # Local environment variables (gitignored) - **CREATE THIS FILE**
-├── .gitignore            # Git ignore file
-├── supervisord.conf      # Supervisor config for managing processes in Docker
-├── Dockerfile            # Dockerfile for containerization
+├── .gitignore            # Git ignore patterns
+├── .dockerignore         # Files/dirs excluded from Docker build contexts
+├── requirements.txt      # Centralized Python dependencies
+├── docker-compose.yml    # Docker Compose file for orchestration
 └── README.md             # This file
+
+# Note: Vector store files (vector_store.faiss, vector_store_metadata.json)
+# are built automatically inside the rag_api image when using Docker Compose,
+# or generated locally when running with a virtual environment.
+# They are not tracked by Git.
 ```
 
-## Running the Application (Recommended: Docker)
+## Running the Application
 
-This method runs the Phase 1 UI, Phase 2 Backend, and Phase 2 Frontend simultaneously in a container managed by `supervisord`.
+There are two primary methods for running this application:
+
+1.  **Docker Compose (Recommended):** Builds and runs all services as containers.
+2.  **Local Python Virtual Environment:** Runs components directly using your local Python installation.
+
+### Method 1: Docker Compose (Recommended)
+
+This method orchestrates the three microservices (Phase 1 UI, Phase 2 Backend API, Phase 2 Frontend UI) using Docker Compose, ensuring a consistent environment.
 
 **Prerequisites:**
 
-*   Docker Desktop installed and running.
+*   Docker Desktop installed and running (with Docker Compose v2+).
 *   Git installed locally.
-*   Python 3.11+ installed locally (only needed for the one-time data ingestion step).
 
 **Steps:**
 
@@ -54,78 +67,54 @@ This method runs the Phase 1 UI, Phase 2 Backend, and Phase 2 Frontend simultane
     cd KPMG-Project
     ```
 
-2.  **Create Environment File:**
-    *   Create a file named `.env` in the project root directory.
-    *   Copy the following structure into `.env` and fill in your actual Azure credentials and desired configurations:
+2.  **Create Environment File (`.env`):**
+    *   In the project root (`KPMG-Project/`), create a file named `.env`.
+    *   Populate it with your Azure credentials and configuration based on the following structure:
         ```dotenv
         # Azure Document Intelligence (Phase 1)
-        AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT="YOUR_DOC_INTEL_ENDPOINT"
-        AZURE_DOCUMENT_INTELLIGENCE_KEY="YOUR_DOC_INTEL_KEY"
+        AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT=YOUR_DOC_INTEL_ENDPOINT
+        AZURE_DOCUMENT_INTELLIGENCE_KEY=YOUR_DOC_INTEL_KEY
 
         # Azure OpenAI (Both Phases)
-        AZURE_OPENAI_ENDPOINT="YOUR_AZURE_OPENAI_ENDPOINT"
-        AZURE_OPENAI_KEY="YOUR_AZURE_OPENAI_KEY"
-        AZURE_OPENAI_API_VERSION="2024-02-15-preview" # Or your desired API version
+        AZURE_OPENAI_ENDPOINT=YOUR_AZURE_OPENAI_ENDPOINT
+        AZURE_OPENAI_KEY=YOUR_AZURE_OPENAI_KEY
+        AZURE_OPENAI_API_VERSION=2024-02-15-preview # Specify desired API version
 
         # Azure OpenAI Deployments
-        AZURE_OPENAI_DEPLOYMENT="gpt-4o" # Or your preferred chat model deployment name (Phase 1 & 2)
-        AZURE_OPENAI_EMBEDDING_DEPLOYMENT="text-embedding-ada-002" # Or your embedding model deployment name (Phase 2)
+        AZURE_OPENAI_DEPLOYMENT=gpt-4o # Deployment name for Chat model (Phase 1 & 2)
+        AZURE_OPENAI_EMBEDDING_DEPLOYMENT=text-embedding-ada-002 # Deployment name for Embedding model (Phase 2)
 
-        # Phase 2 - Data Ingestion Configuration
-        CHUNK_SIZE=1000 # Size of text chunks for vector store
-        CHUNK_STRIDE=200 # Overlap between text chunks
-
-        # Phase 2 - Optional: Data Paths (Defaults should work if structure is maintained)
-        # HTML_DATA_DIR=assignment/phase2_data
-        # VECTOR_STORE_PATH=vector_store.faiss
-        # METADATA_PATH=vector_store_metadata.json
+        # Phase 2 - Data Ingestion Configuration (Used during rag_api image build)
+        CHUNK_SIZE=1000
+        CHUNK_STRIDE=200
         ```
-    *   **Important:** Ensure this `.env` file is present in the root directory. It's used by both the local ingestion script and copied into the Docker container.
+    *   **Note on Quoting:** While some tools might parse `.env` files with quotes around values, the standard convention is to omit quotes unless the value contains spaces or special characters. For simplicity and compatibility, it's recommended to enter values directly (e.g., `AZURE_OPENAI_KEY=YOUR_KEY_HERE`).
+    *   **Importance:** This file provides credentials needed during the build of the `rag_api` image (for data ingestion) and at runtime for both the `extractor` and `rag_api` services to connect to Azure.
 
-3.  **Install Local Dependencies for Data Ingestion:**
-    *   (Optional but recommended) Create and activate a Python virtual environment:
+3.  **Build and Run Services:**
+    *   Open a terminal in the project root directory.
+    *   Execute the command:
         ```bash
-        python -m venv venv
-        source venv/bin/activate # On Linux/macOS
-        # venv\Scripts\activate # On Windows
+        docker compose up --build
         ```
-    *   Install packages needed *only* for the ingestion script:
-        ```bash
-        # Make sure pip is up to date
-        python -m pip install --upgrade pip
-        # Install ingestion requirements
-        pip install python-dotenv beautifulsoup4 numpy faiss-cpu openai
-        ```
-        *(Note: `faiss-gpu` can be used instead of `faiss-cpu` if you have a compatible GPU and CUDA setup.)*
+    *   This command performs the following:
+        *   Builds the Docker images for `extractor`, `rag_api`, and `rag_ui` services.
+        *   Automatically runs the data ingestion script during the `rag_api` image build, creating the vector store **inside the image** for the `rag_api` service.
+        *   Starts containers for all three services.
+        *   The services will start concurrently. The `rag_ui` might become accessible slightly before the `rag_api` is fully initialized.
 
-4.  **Run Data Ingestion:**
-    *   Execute the script to process the HTML files and create the vector store:
-        ```bash
-        python data_ingest/build_vector_store.py
-        ```
-    *   Verify that `vector_store.faiss` and `vector_store_metadata.json` are created in the project root. These files are crucial and will be copied into the Docker image.
+4.  **Access Services:**
+    *   Phase 1 UI (Extractor): [`http://localhost:7860`](http://localhost:7860)
+    *   Phase 2 UI (RAG Chatbot): [`http://localhost:7861`](http://localhost:7861)
+    *   Phase 2 Backend Health Check: [`http://localhost:8000/health`](http://localhost:8000/health)
 
-5.  **Build Docker Image:**
-    *   From the project root directory (where the `Dockerfile` is located):
-        ```bash
-        docker build -t kpmg-genai-app .
-        ```
+5.  **Stopping Services:**
+    *   Press `Ctrl+C` in the terminal running `docker compose up`.
+    *   To remove the containers and associated network: `docker compose down`
 
-6.  **Run Docker Container:**
-    *   The `--env-file .env` flag passes your Azure credentials securely into the container.
-    ```bash
-    docker run --rm -p 8000:8000 -p 7860:7860 -p 7861:7861 --env-file .env --name kpmg-genai-container kpmg-genai-app
-    ```
-    *(Note: `--rm` automatically removes the container when it exits. Remove it if you want to inspect a stopped container.)*
+### Method 2: Local Python Virtual Environment
 
-7.  **Access Services:**
-    *   Phase 1 UI: `http://localhost:7860`
-    *   Phase 2 UI: `http://localhost:7861`
-    *   Phase 2 Backend Health Check: `http://localhost:8000/health`
-
-## Running Locally (Using Virtual Environment)
-
-This method allows running the different components individually without Docker.
+This method runs the components directly on your machine using Python. It requires manual setup of dependencies and the vector store.
 
 **Prerequisites:**
 
@@ -136,63 +125,74 @@ This method allows running the different components individually without Docker.
 
 1.  **Clone Repository:**
     ```bash
-    git clone <your-repo-url>
-    cd <your-repo-name>
+    git clone https://github.com/ido2103/KPMG-Project
+    cd KPMG-Project
     ```
 
-2.  **Create Environment File:**
-    *   Follow Step 2 from the Docker instructions above to create and populate the `.env` file in the project root.
+2.  **Create Environment File (`.env`):**
+    *   Follow Step 2 from the Docker Compose instructions above to create and populate the `.env` file in the project root.
 
-3.  **Setup Virtual Environment and Install All Dependencies:**
-    *   Create and activate a Python virtual environment (see Step 3 in Docker instructions).
-    *   Install all necessary dependencies for both phases and data ingestion:
+3.  **Setup Virtual Environment:**
+    *   It is highly recommended to use a virtual environment to manage dependencies.
+    *   From the project root directory, create and activate a virtual environment:
+        ```bash
+        # Create the virtual environment (e.g., named 'venv')
+        python -m venv venv 
+        # Activate it:
+        # Windows (cmd.exe)
+        venv\Scripts\activate.bat 
+        # Windows (PowerShell or Git Bash)
+        venv\Scripts\Activate.ps1 
+        # macOS / Linux
+        source venv/bin/activate 
+        ```
+    *   Your terminal prompt should now indicate the active environment (e.g., `(venv) C:\\...\\KPMG-Project>`).
+
+4.  **Install Dependencies:**
+    *   Ensure pip is up-to-date and install all project requirements into your active virtual environment:
         ```bash
         python -m pip install --upgrade pip
-        # Install backend dependencies (FastAPI, Uvicorn, etc.)
-        pip install -r app/requirements.txt
-        # Install Phase 1 dependencies
-        pip install azure-ai-documentintelligence==1.0.0b2 # Pin version if necessary
-        # Install Phase 2 frontend dependencies
-        pip install gradio requests
-        # Install data ingestion dependencies
-        pip install python-dotenv beautifulsoup4 numpy faiss-cpu openai==1.30.1 # Pin openai version if needed
+        pip install -r requirements.txt
         ```
 
-4.  **Run Data Ingestion (if not already done):**
-    *   If you haven't run it yet (e.g., you skipped the Docker setup), run the ingestion script:
+5.  **Build Vector Store Manually:**
+    *   Run the data ingestion script once to create the knowledge base for Phase 2:
         ```bash
         python data_ingest/build_vector_store.py
         ```
-    *   Ensure `vector_store.faiss` and `vector_store_metadata.json` exist in the root.
+    *   Verify that `vector_store.faiss` and `vector_store_metadata.json` are created in the project root directory.
 
-5.  **Run Components (in separate terminals):**
-
-    *   **Terminal 1: Phase 2 Backend (FastAPI)**
+6.  **Run Services (in separate terminals):**
+    *   You will need three separate terminals, each with the virtual environment activated (`source venv/bin/activate` or `venv\Scripts\activate`).
+    *   **Terminal 1: Phase 2 Backend (FastAPI):**
         ```bash
-        # Ensure your virtual environment is active
-        uvicorn app.main:app --reload --port 8000
+        # (venv) ... > 
+        uvicorn app.main:app --host 0.0.0.0 --port 8000
         ```
-
-    *   **Terminal 2: Phase 1 UI (Gradio)**
+    *   **Terminal 2: Phase 1 UI (Gradio):**
         ```bash
-        # Ensure your virtual environment is active
+        # (venv) ... > 
         python phase1_ui.py
         ```
-        *(Access at `http://localhost:7860`)*
-
-    *   **Terminal 3: Phase 2 UI (Gradio)**
+    *   **Terminal 3: Phase 2 UI (Gradio):**
         ```bash
-        # Ensure your virtual environment is active
+        # (venv) ... > 
         python frontend/ui.py
         ```
-        *(Access at `http://localhost:7861`)*
+
+7.  **Access Services:**
+    *   Phase 1 UI (Extractor): [`http://localhost:7860`](http://localhost:7860)
+    *   Phase 2 UI (RAG Chatbot): [`http://localhost:7861`](http://localhost:7861)
+    *   Phase 2 Backend Health Check: [`http://localhost:8000/health`](http://localhost:8000/health)
+
+8.  **Stopping Services:**
+    *   Press `Ctrl+C` in each of the three terminals.
+    *   To deactivate the virtual environment: `deactivate`
 
 ## Notes
 
-*   **Vector Store:** The application relies on the `vector_store.faiss` and `vector_store_metadata.json` files. You **must** run the `data_ingest/build_vector_store.py` script successfully at least once before running the Phase 2 backend (either locally or via Docker build). These files are intentionally gitignored.
-*   **Credentials:** Never commit your `.env` file to Git. Ensure it's listed in your `.gitignore` file.
-*   **Paths:** The default paths assume the standard project structure. If you modify the structure, update the relevant path configurations in `app/config.py` and `data_ingest/build_vector_store.py`.
-*   **Dependencies:** Pay attention to potential version conflicts. Using a virtual environment is highly recommended. Check the `requirements.txt` and individual `pip install` commands for specific versions if needed.
+*   **Credentials:** Never commit your `.env` file to Git. Ensure it's listed in `.gitignore`.
+*   **Vector Store:** When running locally, ensure you run the `data_ingest/build_vector_store.py` script after installing dependencies and before starting the backend service.
 
 ## Project Overview
 

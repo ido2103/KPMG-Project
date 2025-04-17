@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  extractor:
+    build:
+      context: .
+      dockerfile: phase1/Dockerfile
+    ports:
+      - "7860:7860"
+    env_file:
+      - .env # Needed for Azure credentials at runtime
+    healthcheck:
+      # Check if the Gradio UI is responding (basic HTTP check)
+      test: ["CMD", "curl", "--fail", "http://localhost:7860"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s # Give time for Gradio to start
+    networks:
+      - app-network
+
+  rag_api:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env # Needed for Azure credentials at runtime (and build time via context)
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8000/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 60s # Increased start period
+    networks:
+      - app-network
+
+  rag_ui:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "7861:7861"
+    # depends_on:
+    #   rag_api: # Wait for rag_api to be healthy before starting
+    #     condition: service_healthy
+    # No env_file needed here as BACKEND_API_URL is set in its Dockerfile
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge 

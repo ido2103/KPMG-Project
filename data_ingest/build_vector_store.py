@@ -45,8 +45,15 @@ except ValueError:
 
 # Paths (relative to project root)
 DATA_DIR = os.path.join(project_root, "assignment/phase2_data")
-INDEX_PATH = os.path.join(project_root, "vector_store.faiss")
-METADATA_PATH = os.path.join(project_root, "vector_store_metadata.json")
+# Allow overriding output paths via environment variables for Docker build flexibility
+INDEX_PATH = os.getenv("OUTPUT_INDEX_PATH", os.path.join(project_root, "vector_store.faiss"))
+METADATA_PATH = os.getenv("OUTPUT_METADATA_PATH", os.path.join(project_root, "vector_store_metadata.json"))
+
+# Ensure output directory exists if specified via env var
+output_dir = os.path.dirname(INDEX_PATH)
+if output_dir and not os.path.exists(output_dir):
+    logger.info(f"Creating output directory: {output_dir}")
+    os.makedirs(output_dir, exist_ok=True)
 
 # Check essential config
 if not all([AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_KEY, AZURE_OPENAI_EMBEDDING_DEPLOYMENT]):

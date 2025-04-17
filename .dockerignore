@@ -1,0 +1,67 @@
+# Git files
+.git/
+.gitignore
+
+# Environment files
+# .env
+*.env.*
+!.env.example # Keep example file if it exists
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+
+venv/
+env/
+.venv/
+*/venv/
+*/env/
+*/.venv/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+logs/
+*.log.*
+
+# IDE / Editor specific
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Build artifacts
+/build/
+/dist/
+/*.egg-info/
+
+# Test files & data
+/tests/
+*.test.py
+*.spec.py
+/assignment/ # Exclude assignment data/specs
+# node_modules/ # If any JS tools were used
+
+# Generated Vector Store (should not be copied, built inside image)
+vector_store.faiss
+vector_store_metadata.json
+
+# Docker specific (usually not ignored, but listed for context)
+# Dockerfile
+# docker-compose.yml
+# supervisord.conf
+
+# Temporary files
+*.tmp
+*.bak
+*.old 

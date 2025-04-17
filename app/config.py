@@ -39,9 +39,13 @@ if not all([AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_KEY, AZURE_OPENAI_DEPLOYMENT, AZ
     # exit(1) 
 
 # --- Vector Store Paths ---
-# Assuming these files are in the project root, relative to where the app is run
-INDEX_PATH = os.getenv("INDEX_PATH", os.path.join(project_root, "vector_store.faiss"))
-METADATA_PATH = os.getenv("METADATA_PATH", os.path.join(project_root, "vector_store_metadata.json"))
+# Inside the container, the files are copied directly into the /app working directory.
+# Use absolute paths within the container context.
+INDEX_PATH = os.getenv("INDEX_PATH", "/app/vector_store.faiss")
+METADATA_PATH = os.getenv("METADATA_PATH", "/app/vector_store_metadata.json")
+
+logger.info(f"Runtime INDEX_PATH: {INDEX_PATH}")
+logger.info(f"Runtime METADATA_PATH: {METADATA_PATH}")
 
 # --- Chat Configuration ---
 MAX_HISTORY_TURNS = int(os.getenv("MAX_HISTORY_TURNS", 10))
