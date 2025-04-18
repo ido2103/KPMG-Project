@@ -1,4 +1,5 @@
 import logging
+import re
 
 # Import config
 from .config import logger
@@ -19,6 +20,10 @@ def validate_extracted_data(data):
             data["idNumber"] = id_number
             logger.info(f"ID number too long, truncating: {original_id} -> {id_number}")
             validation_issues.append(f"Truncated ID number: {original_id} -> {id_number}")
+
+        # Add regex validation for 9 digits after potential truncation
+        if id_number and not re.fullmatch(r"\d{9}", id_number):
+             validation_issues.append(f"Invalid ID number format: '{id_number}' (should be 9 digits)")
 
     # 1. Fix JSON structure issues - ensure medicalInstitutionFields is nested correctly
     if "healthFundMember" in data:
